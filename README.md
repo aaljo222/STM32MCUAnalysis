@@ -1,5 +1,5 @@
 ## 📘 TIMER 및 레지스터 설정 예제 (STM32)
-![DMA and AHB Diagram](./A_block_diagram_DMA_(DMA.png))
+![DMA and AHB Diagram](images/DMA.png)
 
 ⏱️ 일반 목적 Timer 설명 (TIM2~TIM5)
 
