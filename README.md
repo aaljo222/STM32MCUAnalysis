@@ -24,7 +24,8 @@ STM32의 FSMC(Flexible Static Memory Controller)를 사용해 비멀티플렉스
 > ✅ 기준: C_L = 30pF
 
 ---
-
+![FSMC 설정 예시](./images/4_1.PNG)
+![FSMC 설정 예시](./images/4_2.PNG)
 ### 📐 타이밍 파라미터 설명
 
 | 심볼 | 설명 | Min | Max | 단위 | 약어 설명 |
