@@ -74,3 +74,123 @@
 ---
 
 > 📘 이 문서는 STM32F20x 사용자 매뉴얼 기반의 요약이며, 기능 세부 설정은 레지스터 매핑 및 HAL/LL 라이브러리를 통해 적용할 수 있습니다.
+
+📦 전체 메모리 맵 구조 (0x0000_0000 ~ 0xFFFF_FFFF)
+STM32는 주소 공간을 512MB 단위로 8개의 블록으로 나눕니다:
+
+주소 범위	블록	설명
+0x0000_0000 ~ 0x1FFF_FFFF	Block 0	Code 영역 (Flash, Boot Memory)
+0x2000_0000 ~ 0x3FFF_FFFF	Block 1	SRAM 영역
+0x4000_0000 ~ 0x5FFF_FFFF	Block 2	Peripherals (레지스터)
+0x6000_0000 ~ 0x7FFF_FFFF	Block 3	FSMC bank1 & bank2 (외부 메모리 인터페이스)
+0x8000_0000 ~ 0x9FFF_FFFF	Block 4	FSMC bank3 & bank4
+0xA000_0000 ~ 0xBFFF_FFFF	Block 5	FSMC 레지스터
+0xC000_0000 ~ 0xDFFF_FFFF	Block 6	사용되지 않음
+0xE000_0000 ~ 0xFFFF_FFFF	Block 7	Cortex-M3 내부 시스템 및 디버그용 레지스터
+
+🔸 Block 0 (Code 영역) 상세
+주소	설명
+0x0000_0000	Flash, System Memory, or SRAM으로 alias 됨 (BOOT 핀에 따라 달라짐)
+0x0800_0000 ~ 0x080F_FFFF	Flash 메모리
+0x1FFF_0000 ~ 0x1FFF_7A0F	System Memory, OTP, Option Bytes 등
+0x1FFF_C000 ~ 0x1FFF_FFFF	Option Bytes, Reserved 등
+
+🔸 Block 1 (SRAM 영역) 상세
+주소	설명
+0x2000_0000 ~ 0x2001_BFFF	SRAM (112KB)
+0x2001_C000 ~ 0x2001_FFFF	SRAM (16KB)
+0x2002_0000 ~ 0x3FFF_FFFF	Reserved (bit-band alias 영역 포함)
+
+💡 Bit-Banding: 비트를 개별적으로 다루기 위해 특별히 매핑된 주소 영역입니다.
+
+🔸 Block 2 (Peripherals 영역) 상세
+주소	주변장치
+0x4000_0000 ~ 0x4000_03FF	TIM2, TIM3, TIM4 등
+...	...
+0x4001_0000 ~ 0x4001_FFFF	USART1, SPI1, ADC1~3 등
+총 0x4000_0000 ~ 0x5006_03FF	모든 AHB/APB 장치들이 여기에 위치
+
+🔸 Block 3 & 4 (FSMC External Memory 영역)
+이 영역은 **외부 메모리 (PSRAM, NOR, NAND 등)**를 연결하는 FSMC 컨트롤러의 bank별 주소입니다:
+
+주소 범위	연결 장치
+0x6000_0000 ~ 0x63FF_FFFF	FSMC bank1 NOR/PSRAM 1
+0x6400_0000 ~ 0x67FF_FFFF	FSMC bank1 NOR/PSRAM 2
+0x6800_0000 ~ 0x6BFF_FFFF	FSMC bank1 NOR/PSRAM 3
+0x6C00_0000 ~ 0x6FFF_FFFF	FSMC bank1 NOR/PSRAM 4
+0x7000_0000 ~ 0x7FFF_FFFF	FSMC bank2 NAND
+0x8000_0000 ~ 0x8FFF_FFFF	FSMC bank3 NAND
+
+🔸 Block 7 (Cortex-M3 내부 영역)
+주소 범위	설명
+0xE000_0000 ~ 0xE00F_FFFF	NVIC, SCB, SysTick 등
+0xE004_2000 등	디버깅, ITM, DWT 등 디버그 모듈
+
+Memory-Mapped I/O란?
+Memory-Mapped I/O는 주변 장치 (GPIO, USART, TIM 등)의 레지스터를 메모리 주소 공간에 직접 매핑해서 일반 메모리처럼 접근하는 방식입니다.
+
+즉,
+
+c
+복사
+편집
+#define GPIOA_MODER  (*(volatile uint32_t*)0x40020000)
+GPIOA_MODER = 0x00000001;
+처럼 메모리에 값을 쓰는 것처럼 레지스터를 제어하는 방식입니다.
+
+✅ STM32에서의 MMIO 예시
+STM32에서는 Block 2 (0x4000_0000 ~ 0x5FFF_FFFF)가 바로 이 MMIO를 위한 주변장치 레지스터 영역입니다.
+
+장치	시작 주소	예시 설명
+GPIOA	0x4002_0000	포트 A 제어
+USART2	0x4000_4400	시리얼 통신 제어
+TIM2	0x4000_0000	타이머 제어
+RCC	0x4002_3800	클럭 설정
+
+✅ 왜 MMIO를 사용할까?
+방식	특징
+MMIO	CPU가 메모리처럼 장치 레지스터에 접근함. Load/Store 명령 사용.
+Port-Mapped I/O (x86에서 사용)	특별한 I/O 명령 사용 (in, out)
+
+STM32는 MMIO 방식만 지원합니다. 장점은:
+
+CPU 입장에서 I/O도 메모리처럼 읽고 씀
+
+주소 공간 통합 관리
+
+고속 처리 (버스에 직접 연결됨)
+
+✅ STM32 MMIO 작동 방식 그림
+STM32 내부 구조는 다음과 같은 흐름입니다:
+
+복사
+편집
+[ CPU ]
+   ↓
+[ BUS (AHB/APB) ]
+   ↓
+[ 주소 디코더 ] → 0x4002_0000 = GPIOA
+   ↓
+[ 장치 레지스터 ]
+✅ 예제: GPIOA 핀 출력 제어 (MMIO 직접 접근)
+c
+복사
+편집
+#define RCC_AHB1ENR   (*(volatile uint32_t*)0x40023830)
+#define GPIOA_MODER   (*(volatile uint32_t*)0x40020000)
+#define GPIOA_ODR     (*(volatile uint32_t*)0x40020014)
+
+void gpio_init(void) {
+    RCC_AHB1ENR |= (1 << 0);        // GPIOA 클럭 활성화
+    GPIOA_MODER |= (1 << 10);       // PA5를 출력 모드로
+}
+
+void gpio_write_high(void) {
+    GPIOA_ODR |= (1 << 5);          // PA5 출력 High
+}
+✅ 요약
+항목	설명
+MMIO란?	주변장치 레지스터를 메모리 주소처럼 직접 접근
+STM32 적용 주소	0x4000_0000 ~ 0x5FFF_FFFF (Block 2)
+접근 방법	C 포인터를 이용해 직접 레지스터 주소에 접근
+장점	빠르고 일관된 접근 방식, 간결한 하드웨어 제어
